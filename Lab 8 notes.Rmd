@@ -1,0 +1,167 @@
+---
+title: "Lab 8 notes"
+author: "Taylor"
+date: "2/28/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+
+# General packages
+library(tidyverse)
+library(janitor)
+library(plotly)
+library(RColorBrewer)
+
+# Packages for cluster analysis:
+library(NbClust)
+library(cluster)
+library(factoextra)
+library(dendextend)
+library(ggdendro)
+
+# Packages for text mining/sentiment analysis/word cloud
+library(pdftools)
+library(tidytext)
+library(wordcloud)
+```
+
+
+```{r}
+
+iris_nice <- iris %>% 
+  clean_names() # this replaces all names with this_kind_of_thing
+
+ggplot(iris_nice) +
+  geom_point(aes(x = petal_length, y = petal_width, color = species))
+
+# without "color = Species" then this might look like 2 clusters. keep that in mind
+
+ggplot(iris_nice) +
+  geom_point(aes(x = sepal_length, y = sepal_width, color = species))
+
+```
+
+How many clusters do YOU Think should exist, R?
+```{r}
+
+number_est <- NbClust(iris_nice[1:4], min.nc = 2, max.nc = 10, method = "kmeans")
+
+# columns 1-4, minimum number and max number of clusters to consider, methond kmenas
+
+```
+
+Although 10 say 2, we're going to use 3 because it makes the most sense with WHAT WE KNOW
+
+So now we perform k-means
+
+```{r}
+iris_km <- kmeans(iris_nice[1:4], 3)
+
+iris_km$size
+# 62, 38, 50 <- number of observations in each category
+
+iris_km$centers
+# shows multivariate center location associated with those three clusters
+
+iris_km$cluster
+# there is some overlap between 2 + 1
+
+# now we assign points to clusters based on this cluster ^
+
+iris_cl <- data.frame(iris_nice, cluster_no = factor(iris_km$cluster))
+
+# now look at it
+
+ggplot(iris_cl) +
+  geom_point(aes(x=sepal_length, y = sepal_width, color = cluster_no))
+
+ggplot(iris_cl) +
+  geom_point(aes(x=petal_length, 
+                 y = petal_width, 
+                 color = cluster_no, 
+                 pch = species)) + 
+               scale_color_brewer(palette = "Set2")
+
+
+# 3d plot time!
+
+plot_ly(x = iris_cl$petal_length,
+        y = iris_cl$petal_width,
+        z = iris_cl$sepal_width,
+        type = "scatter3d",
+        color = iris_cl$cluster_no,
+        symbol = ~iris_cl$species,
+        marker = list(size = 3),
+        colors = "Set1")
+        
+```
+
+### PART 2. Heirarchical cluster analysis
+
+```{r}
+
+# Get the data
+wb_env <- read_csv("wb_env.csv")
+
+# notice that these values exist on VERY DIFFERENT SCALES. Scale your data!!
+
+# Only keep top 20 greenhouse gas emitters (for simplifying visualization here...)
+wb_ghg_20 <- wb_env %>% 
+  arrange(-ghg) %>% 
+  head(20)
+
+# Scale it (can consider this for k-means clustering, too...)
+wb_scaled <- as.data.frame(scale(wb_ghg_20[3:7]))
+
+# scale(data_frame[only scale these colums]
+# now we have to add back in a country name -- row names!
+
+rownames(wb_scaled) <- wb_ghg_20$name # <- USEFUL
+
+diss <- dist(wb_scaled, method = "euclidean")
+
+
+# Update to add rownames (country name)
+rownames(wb_scaled) <- wb_ghg_20$name
+
+# Compute dissimilarity values (Euclidean distances):
+diss <- dist(wb_scaled, method = "euclidean")
+
+# Hierarchical clustering (complete linkage)
+hc_complete <- hclust(diss, method = "complete" )
+
+# Plot it (base plot):
+plot(hc_complete, cex = 0.6, hang = -1)
+
+```
+
+Divisive clustering:
+```{r}
+hc_div <- diana(diss)
+
+plot(hc_div, hang = -1)
+rect.hclust(hc_div, k = 4, border = 2:5)
+```
+
+
+```{r}
+
+dend1 <-as.dendrogram(hc_complete)
+dend2 <- as.dendrogram(hc_div)
+
+tanglegram(dend1, dend2)
+
+ggdendrogram(hc_complete, rotate = TRUE) +
+  theme_minimal()
+
+```
+
+### Part 3. Intro to text analysis
+
+pdftools, stringr, tidytext
